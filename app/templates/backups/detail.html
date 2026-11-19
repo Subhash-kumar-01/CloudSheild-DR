@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, csrf %}
+{% block title %}{{ backup.backup_name }} - CloudShield DR{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('backups.list_backups') }}">&larr; Backups</a></nav>
+<h1 class="h3">{{ backup.backup_name }} {{ badge(backup.status) }}</h1>
+
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <dl class="row mb-0">
+    <dt class="col-sm-3">Type</dt><dd class="col-sm-9">{{ backup.source_type | replace('_', ' ') | title }}</dd>
+    {% if backup.source_bucket %}<dt class="col-sm-3">Source</dt><dd class="col-sm-9 mono">s3://{{ backup.source_bucket }}/{{ backup.source_prefix or '' }}</dd>{% endif %}
+    <dt class="col-sm-3">Backup bucket</dt><dd class="col-sm-9 mono">{{ backup.destination_bucket }}</dd>
+    {% if backup.object_key %}<dt class="col-sm-3">Object key</dt><dd class="col-sm-9 mono text-break-all">{{ backup.object_key }}</dd>{% endif %}
+    {% if backup.version_id %}<dt class="col-sm-3">Version ID</dt><dd class="col-sm-9 mono text-break-all">{{ backup.version_id }}</dd>{% endif %}
+    {% if backup.sha256_checksum %}<dt class="col-sm-3">SHA-256</dt><dd class="col-sm-9 mono text-break-all">{{ backup.sha256_checksum }}</dd>{% endif %}
+    <dt class="col-sm-3">Size copied</dt><dd class="col-sm-9">{{ backup.size_bytes | filesize }}</dd>
+    {% if backup.is_bucket_sync %}
+    <dt class="col-sm-3">Objects</dt>
+    <dd class="col-sm-9">{{ backup.objects_scanned }} scanned &middot; {{ backup.objects_copied }} copied &middot; {{ backup.objects_failed }} failed
+      {% if backup.objects_missing_at_source %}&middot; <span class="text-warning">{{ backup.objects_missing_at_source }} no longer in source (kept safe in backup)</span>{% endif %}</dd>
+    {% endif %}
+    <dt class="col-sm-3">Started</dt><dd class="col-sm-9">{{ backup.started_at | dt }}</dd>
+    <dt class="col-sm-3">Completed</dt><dd class="col-sm-9">{{ backup.completed_at | dt }}{% if backup.duration_seconds is not none %} ({{ backup.duration_seconds }}s){% endif %}</dd>
+    {% if backup.source_description %}<dt class="col-sm-3">Details</dt><dd class="col-sm-9">{{ backup.source_description }}</dd>{% endif %}
+    {% if backup.error_message %}<dt class="col-sm-3 text-danger">Error</dt><dd class="col-sm-9 text-danger">{{ backup.error_message }}</dd>{% endif %}
+  </dl>
+</div></div>
+
+{% if backup.status == 'SUCCEEDED' %}
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <h2 class="h5">Restore</h2>
+  {% if not recovery_point %}
+  <p class="text-muted mb-0">This run found nothing new to back up, so it has no recovery point of its own. Restore from the most recent run that copied data (see Backups).</p>
+  {% elif recovery_point.recovery_eligible %}
+  <form method="post" action="{{ url_for('backups.restore', backup_id=backup.id) }}">
+    {{ csrf() }}
+    {% if recovery_point.is_bucket_sync %}
+      <p>
+        Restores your bucket exactly as it was at <strong>{{ recovery_point.recovery_point_time | dt }}</strong> into
+        <code>s3://{{ backup.source_bucket }}/{{ restore_prefix }}/job-&hellip;/</code> in your AWS account.
+        Your live data is never overwritten &mdash; review the files, then copy back what you need.
+      </p>
+    {% else %}
+      <div class="mb-3">
+        <label class="form-label" for="destination">Restore folder name</label>
+        <input id="destination" name="destination" class="form-control" value="restored" required maxlength="200">
+        <div class="form-text">A separate folder; the file is downloaded, checksum-verified and offered as a download.</div>
+      </div>
+    {% endif %}
+    <button class="btn btn-primary">Start restore</button>
+  </form>
+  {% else %}
+  <p class="text-muted mb-0">This recovery point has expired (older than your retention period).</p>
+  {% endif %}
+</div></div>
+{% endif %}
+
+{% if versions %}
+<div class="card shadow-sm"><div class="card-body">
+  <h2 class="h5">Stored versions</h2>
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Version ID</th><th>Modified</th><th>Size</th><th></th></tr></thead>
+    <tbody>
+    {% for v in versions %}
+      <tr>
+        <td class="mono text-break-all">{{ v.version_id }}</td>
+        <td class="small">{{ v.last_modified | dt }}</td>
+        <td class="small">{{ v.size | filesize }}</td>
+        <td>{% if v.is_latest %}<span class="badge text-bg-success">latest</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% endif %}
+{% endblock %}

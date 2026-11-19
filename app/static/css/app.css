@@ -1,0 +1,10 @@
+body { min-height: 100vh; }
+.card { border: 0; }
+pre.code-block {
+  background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: .5rem;
+  font-size: .85rem; overflow-x: auto; white-space: pre; margin-bottom: .5rem;
+}
+.stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }
+.table td, .table th { vertical-align: middle; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85rem; }
+.text-break-all { word-break: break-all; }

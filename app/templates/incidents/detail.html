@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, csrf %}
+{% block title %}{{ incident.title }} - CloudShield DR{% endblock %}
+{% block content %}
+<nav class="mb-2"><a href="{{ url_for('incidents.list_incidents') }}">&larr; Emergency</a></nav>
+<h1 class="h3">{{ incident.title }} {{ badge(incident.status) }}</h1>
+
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <dl class="row mb-0">
+    <dt class="col-sm-3">Type</dt><dd class="col-sm-9">{{ incident.incident_type | replace('_', ' ') | title }}</dd>
+    <dt class="col-sm-3">Severity</dt><dd class="col-sm-9">{{ badge(incident.severity) }}</dd>
+    <dt class="col-sm-3">Affected resource</dt><dd class="col-sm-9 mono text-break-all">{{ incident.affected_resource }}</dd>
+    <dt class="col-sm-3">AWS account</dt><dd class="col-sm-9">{{ incident.aws_connection.display_name }} ({{ incident.aws_connection.aws_account_id }})</dd>
+    <dt class="col-sm-3">Discovered</dt><dd class="col-sm-9">{{ incident.discovered_at | dt }}</dd>
+    <dt class="col-sm-3">Reported loss</dt>
+    <dd class="col-sm-9">{{ '%.0f' | format(incident.reported_data_loss_percent) }}% lost &middot; {{ '%.0f' | format(incident.reported_remaining_percent) }}% remaining</dd>
+    {% if incident.suspected_cause %}<dt class="col-sm-3">Suspected cause</dt><dd class="col-sm-9">{{ incident.suspected_cause }}</dd>{% endif %}
+    {% if incident.description %}<dt class="col-sm-3">Description</dt><dd class="col-sm-9">{{ incident.description }}</dd>{% endif %}
+  </dl>
+  {% if incident.is_active %}
+  <form method="post" action="{{ url_for('incidents.close', incident_id=incident.id) }}" class="mt-3"
+        data-confirm="Close this incident?">
+    {{ csrf() }}<button class="btn btn-sm btn-outline-secondary">Close incident</button>
+  </form>
+  {% endif %}
+</div></div>
+
+{% if incident.incident_type == 'RANSOMWARE' %}
+<div class="alert alert-danger">
+  <strong>Suspected compromise:</strong> isolate affected systems and rotate AWS credentials before restoring.
+  Restore only from a recovery point <em>before</em> the compromise &mdash; points marked &ldquo;after discovery&rdquo; may contain tampered data.
+</div>
+{% endif %}
+
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <h2 class="h5">Step 1 &mdash; Preserve what's left</h2>
+  <p class="text-muted">Upload a copy of any remaining good data. It is stored in your backup bucket with a verified checksum and becomes a recovery point.</p>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('incidents.preserve', incident_id=incident.id) }}">
+    {{ csrf() }}
+    <div class="input-group">
+      <input type="file" class="form-control" name="remaining_file" required>
+      <button class="btn btn-warning">Preserve</button>
+    </div>
+  </form>
+</div></div>
+
+<div class="card shadow-sm mb-4"><div class="card-body" {% if any_active %}data-autorefresh="5"{% endif %}>
+  <h2 class="h5">Step 2 &mdash; Recover from a verified point</h2>
+  {% if recovery_points %}
+  <div class="table-responsive">
+  <table class="table align-middle">
+    <thead><tr><th>Recovery point</th><th>Source</th><th>Integrity</th><th>Relative to incident</th><th>Recover</th></tr></thead>
+    <tbody>
+    {% for p in recovery_points %}
+      {% set before = p.recovery_point_time <= incident.discovered_at %}
+      <tr {% if p.id == recommended_id %}class="table-success"{% endif %}>
+        <td class="small text-nowrap">{{ p.recovery_point_time | dt }}
+          {% if p.id == recommended_id %}<br><span class="badge text-bg-success">Recommended</span>{% endif %}</td>
+        <td class="small text-break-all">{{ p.source_resource }}<br><span class="text-muted">{{ p.backup_type | replace('_', ' ') | title }}</span></td>
+        <td>{{ badge(p.integrity_status) }}</td>
+        <td class="small">{% if before %}<span class="text-success">before discovery</span>{% else %}<span class="text-warning">after discovery</span>{% endif %}</td>
+        <td>
+          <form method="post" action="{{ url_for('incidents.recover', incident_id=incident.id, recovery_point_id=p.id) }}"
+                class="d-flex gap-2 align-items-center">
+            {{ csrf() }}
+            {% if p.is_bucket_sync %}
+              <span class="small text-muted">to your bucket's <code>{{ 'cloudshield-restore/' }}</code> folder</span>
+            {% else %}
+              <input name="destination" class="form-control form-control-sm" value="restored" aria-label="Restore folder name" required maxlength="200">
+            {% endif %}
+            <button class="btn btn-sm btn-primary text-nowrap">Recover</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No verified recovery points exist for this AWS account yet.</p>
+  {% endif %}
+</div></div>
+
+{% if recovery_jobs %}
+<div class="card shadow-sm"><div class="card-body">
+  <h2 class="h5">Recovery jobs</h2>
+  <div class="table-responsive">
+  <table class="table table-sm align-middle mb-0">
+    <thead><tr><th>#</th><th>Destination</th><th>Status</th><th>Result</th><th>Data-loss window</th><th></th></tr></thead>
+    <tbody>
+    {% for j in recovery_jobs %}
+      <tr>
+        <td>{{ j.id }}</td>
+        <td class="mono text-break-all">{{ j.destination }}</td>
+        <td>{{ badge(j.status) }}</td>
+        <td class="small">{{ j.result_message or ('Working...' if j.is_active else '-') }}
+          {% if j.observed_recovery_seconds is not none %}<div class="text-muted">Recovered in {{ j.observed_recovery_seconds }}s</div>{% endif %}</td>
+        <td class="small">{% if j.estimated_data_loss_seconds is not none %}{{ (j.estimated_data_loss_seconds / 60) | round(0) | int }} min{% else %}-{% endif %}</td>
+        <td class="text-end">
+          {% if j.status == 'SUCCEEDED' and j.restore_mode == 'SERVER_DOWNLOAD' and j.restored_file %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('backups.download_restored', job_id=j.id) }}">Download</a>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Dashboard - CloudShield DR{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Dashboard</h1>
+
+{% if total_accounts == 0 %}
+<div class="alert alert-info">
+  <strong>Get started:</strong> connect your AWS account, then schedule a backup of your S3 bucket.
+  <a class="alert-link" href="{{ url_for('aws_connections.list_accounts') }}">Connect an AWS account &rarr;</a>
+</div>
+{% elif connected_accounts == 0 %}
+<div class="alert alert-warning">
+  Your AWS account is added but not verified yet.
+  <a class="alert-link" href="{{ url_for('aws_connections.list_accounts') }}">Finish setup &rarr;</a>
+</div>
+{% elif active_schedules == 0 %}
+<div class="alert alert-warning">
+  <strong>Your data isn't protected yet.</strong> Create a backup schedule.
+  <a class="alert-link" href="{{ url_for('schedules.list_schedules') }}">Create schedule &rarr;</a>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body">
+    <div class="text-muted small">Connected AWS accounts</div><div class="stat-value">{{ connected_accounts }}</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body">
+    <div class="text-muted small">Active schedules</div><div class="stat-value">{{ active_schedules }}</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body">
+    <div class="text-muted small">Backups (ok / failed)</div>
+    <div class="stat-value">{{ successful_backups }} <span class="text-danger fs-5">/ {{ failed_backups }}</span></div>
+    <div class="text-muted small">{{ total_backups }} total</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body">
+    <div class="text-muted small">Data copied</div><div class="stat-value">{{ total_bytes | filesize }}</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card shadow-sm h-100"><div class="card-body">
+    <div class="text-muted small">Open incidents</div>
+    <div class="stat-value {{ 'text-danger' if open_incidents else '' }}">{{ open_incidents }}</div>
+  </div></div></div>
+  <div class="col-12 col-lg-9"><div class="card shadow-sm h-100"><div class="card-body">
+    <div class="text-muted small">Last successful backup</div>
+    <div class="fs-5">{{ last_success.completed_at | dt if last_success else 'No successful backup yet' }}</div>
+    {% if last_success %}<div class="text-muted small">{{ last_success.backup_name }}</div>{% endif %}
+  </div></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100"><div class="card-body">
+      <h2 class="h5">Recent backups</h2>
+      {% if recent_backups %}
+      <table class="table table-sm mb-0">
+        <tbody>
+        {% for b in recent_backups %}
+          <tr>
+            <td><a href="{{ url_for('backups.backup_detail', backup_id=b.id) }}">{{ b.backup_name }}</a></td>
+            <td>{{ badge(b.status) }}</td>
+            <td class="text-muted small">{{ b.created_at | dt }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="text-muted mb-0">Nothing yet.</p>{% endif %}
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100"><div class="card-body">
+      <h2 class="h5">Recent recoveries</h2>
+      {% if recent_recoveries %}
+      <table class="table table-sm mb-0">
+        <tbody>
+        {% for j in recent_recoveries %}
+          <tr>
+            <td class="text-break-all">{{ j.destination }}</td>
+            <td>{{ badge(j.status) }}</td>
+            <td class="text-muted small">{{ j.created_at | dt }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="text-muted mb-0">No recoveries yet.</p>{% endif %}
+    </div></div>
+  </div>
+  <div class="col-12">
+    <div class="card shadow-sm"><div class="card-body">
+      <h2 class="h5">Security events</h2>
+      {% if security_events %}
+      <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>When</th><th>Category</th><th>Severity</th><th>Resource</th><th>Details</th><th>Recommended response</th></tr></thead>
+        <tbody>
+        {% for e in security_events %}
+          <tr>
+            <td class="small text-nowrap">{{ e.created_at | dt }}</td>
+            <td>{{ e.event_category | replace('_', ' ') }}</td>
+            <td>{{ badge(e.severity) }}</td>
+            <td class="small text-break-all">{{ e.affected_resource or '-' }}</td>
+            <td class="small">{{ e.details or '-' }}</td>
+            <td class="small">{{ e.recommended_response or '-' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}<p class="text-muted mb-0">No security events. CloudShield flags mass deletions and mass modifications (possible ransomware) automatically.</p>{% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

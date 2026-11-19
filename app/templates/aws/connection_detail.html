@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, badge, csrf %}
+{% block title %}AWS Connection - CloudShield DR{% endblock %}
+{% block content %}
+<h1 class="h3">{{ connection.display_name }}</h1>
+<p class="text-muted">
+  Account <span class="mono">{{ connection.aws_account_id }}</span> &middot; {{ connection.region }} &middot;
+  Status: {{ badge(connection.status) }}
+  {% if connection.status_message %}<br><span class="small">{{ connection.status_message }}</span>{% endif %}
+  {% if connection.last_verified_at %}<br><span class="small">Last verified {{ connection.last_verified_at | dt }}</span>{% endif %}
+</p>
+
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <h2 class="h5">1. Deploy the secure connection stack</h2>
+  <p>
+    This creates a <strong>versioned, encrypted, private backup bucket</strong> and an IAM role that CloudShield
+    can assume <em>only with this External ID</em>. The role is read-only on your data, can write only to the
+    backup bucket and to a <code>cloudshield-restore/</code> folder, and has delete permissions explicitly denied.
+  </p>
+  {% if not platform_account_id %}
+  <div class="alert alert-warning">The administrator has not set <code>CLOUDSHIELD_AWS_ACCOUNT_ID</code> yet. Backups cannot work until it is configured.</div>
+  {% endif %}
+  <p><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('aws_connections.download_template') }}">Download {{ template_name }}</a></p>
+  <p class="mb-1 fw-semibold">Run in AWS CloudShell (or any terminal with the AWS CLI), in the same folder as the template:</p>
+  <pre class="code-block" id="cfn-command">{{ cfn_command }}</pre>
+  <button type="button" class="btn btn-sm btn-outline-primary" data-copy="#cfn-command">Copy command</button>
+  <p class="small text-muted mt-3 mb-0">
+    Prefer the console? Upload the template in CloudFormation &rarr; Create stack, and enter the same values.
+    Deploy it in <strong>{{ connection.region }}</strong> and tick the &ldquo;IAM resources&rdquo; acknowledgement.
+  </p>
+</div></div>
+
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <h2 class="h5">2. Connection details</h2>
+  <label class="form-label fw-semibold" for="external-id">External ID (keep private)</label>
+  <input id="external-id" class="form-control mb-3 mono" readonly value="{{ connection.external_id }}">
+
+  <label class="form-label fw-semibold" for="role-arn">IAM role ARN</label>
+  <input id="role-arn" class="form-control mb-3 mono" readonly value="{{ connection.role_arn }}">
+
+  <div class="row mb-3">
+    <div class="col-md-6"><span class="text-muted small">Source buckets CloudShield may read</span><br><code>{{ connection.source_scope }}</code></div>
+    <div class="col-md-6"><span class="text-muted small">Old versions kept for</span><br>{{ connection.retention_days }} days</div>
+  </div>
+
+  <form method="post" action="{{ url_for('aws_connections.verify_account', connection_id=connection.id) }}" class="d-inline">
+    {{ csrf() }}
+    <button class="btn btn-primary">Verify connection</button>
+  </form>
+
+  <form method="post" action="{{ url_for('aws_connections.disconnect_account', connection_id=connection.id) }}" class="d-inline"
+        data-confirm="Remove this AWS connection from CloudShield? Your backup bucket and its data will NOT be deleted.">
+    {{ csrf() }}
+    <button class="btn btn-outline-danger">Disconnect</button>
+  </form>
+</div></div>
+
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <h2 class="h5">Backup destination</h2>
+  <form method="post" action="{{ url_for('aws_connections.set_backup_bucket', connection_id=connection.id) }}">
+    {{ bucket_form.hidden_tag() }}
+    <div class="mb-3">
+      {{ bucket_form.backup_bucket.label(class_="form-label") }}
+      {{ bucket_form.backup_bucket(class_="form-control mono", value=connection.backup_bucket or "") }}
+    </div>
+    <button class="btn btn-outline-primary">Save bucket</button>
+  </form>
+  <p class="text-muted small mt-3 mb-0">
+    The bucket must have S3 Versioning enabled (the stack does this). For stronger ransomware protection redeploy
+    the stack with <code>ObjectLockDays</code> set. Changing the bucket requires re-verification.
+  </p>
+</div></div>
+
+{% if connection.is_connected %}
+<div class="alert alert-success">
+  Connected. Next: <a class="alert-link" href="{{ url_for('schedules.list_schedules') }}">schedule a bucket backup</a>
+  or <a class="alert-link" href="{{ url_for('backups.list_backups') }}">upload a file backup</a>.
+</div>
+{% endif %}
+{% endblock %}

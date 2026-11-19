@@ -1,0 +1,27 @@
+# Cheapest setup: one small server, SQLite database in a volume (no database server to pay for).
+#   cp .env.example .env   # then edit SECRET_KEY and CLOUDSHIELD_AWS_ACCOUNT_ID
+#   docker compose up -d --build
+# Want MySQL instead?  docker compose -f docker-compose.yml -f docker-compose.mysql.yml up -d --build
+services:
+  web:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - app_data:/app/instance
+    restart: unless-stopped
+
+  worker:
+    build: .
+    env_file: .env
+    command: ["python", "worker.py"]
+    volumes:
+      - app_data:/app/instance
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  app_data:

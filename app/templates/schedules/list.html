@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, badge, csrf %}
+{% block title %}Backup schedules - CloudShield DR{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Backup schedules</h1>
+<p class="text-muted">
+  Automatically copy an S3 bucket (or folder) into your versioned backup bucket. Only new and changed files are copied,
+  nothing is ever deleted, and every old version stays recoverable for your retention period.
+</p>
+
+<div class="card shadow-sm mb-4"><div class="card-body" {% if schedules | selectattr('is_running') | list %}data-autorefresh="10"{% endif %}>
+  {% if schedules %}
+  <div class="table-responsive">
+  <table class="table align-middle mb-0">
+    <thead><tr><th>Name</th><th>Source</th><th>Every</th><th>Storage</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
+    <tbody>
+    {% for s in schedules %}
+      <tr>
+        <td>{{ s.name }}{% if not s.enabled %} <span class="badge text-bg-secondary">paused</span>{% endif %}</td>
+        <td class="mono text-break-all">{{ s.source_display }}</td>
+        <td>{{ s.frequency | title }}</td>
+        <td class="small">{{ s.storage_class | replace('_', ' ') | title }}</td>
+        <td class="small">
+          {% if s.is_running %}{{ badge('RUNNING') }}
+          {% elif s.last_run_at %}{{ badge(s.last_status) }}<br>{{ s.last_run_at | dt }}
+          {% else %}<span class="text-muted">never</span>{% endif %}
+          {% if s.last_message and not s.is_running %}<div class="text-muted">{{ s.last_message }}</div>{% endif %}
+        </td>
+        <td class="small">{{ s.next_run_at | dt if s.enabled else '-' }}</td>
+        <td class="text-end text-nowrap">
+          <form method="post" action="{{ url_for('schedules.run_now', schedule_id=s.id) }}" class="d-inline">{{ csrf() }}
+            <button class="btn btn-sm btn-outline-primary" {% if s.is_running %}disabled{% endif %}>Run now</button></form>
+          <form method="post" action="{{ url_for('schedules.toggle_schedule', schedule_id=s.id) }}" class="d-inline">{{ csrf() }}
+            <button class="btn btn-sm btn-outline-secondary">{{ 'Pause' if s.enabled else 'Resume' }}</button></form>
+          <form method="post" action="{{ url_for('schedules.delete_schedule', schedule_id=s.id) }}" class="d-inline"
+                data-confirm="Delete this schedule? Existing backups and recovery points are kept.">{{ csrf() }}
+            <button class="btn btn-sm btn-outline-danger">Delete</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No schedules yet.</p>
+  {% endif %}
+</div></div>
+
+<div class="card shadow-sm"><div class="card-body">
+  <h2 class="h5">New schedule</h2>
+  {% if not connections %}
+  <div class="alert alert-warning mb-0">
+    You need a verified AWS account first.
+    <a class="alert-link" href="{{ url_for('aws_connections.list_accounts') }}">Connect one &rarr;</a>
+  </div>
+  {% else %}
+  <form method="post" action="{{ url_for('schedules.create_schedule') }}" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="row">
+      <div class="col-md-6">{{ field(form.name, placeholder="e.g. Production uploads") }}</div>
+      <div class="col-md-6">{{ field(form.connection_id) }}</div>
+      <div class="col-md-6">{{ field(form.source_bucket, placeholder="my-app-data") }}</div>
+      <div class="col-md-6">{{ field(form.source_prefix, placeholder="e.g. uploads/ (leave empty for the whole bucket)") }}</div>
+      <div class="col-md-6">{{ field(form.frequency) }}</div>
+      <div class="col-md-6">{{ field(form.storage_class) }}</div>
+    </div>
+    <button class="btn btn-primary">Create schedule and run first backup</button>
+  </form>
+  {% endif %}
+</div></div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import field, badge %}
+{% block title %}AWS Accounts - CloudShield DR{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">AWS accounts</h1>
+
+<div class="card shadow-sm mb-4"><div class="card-body">
+  {% if connections %}
+  <div class="table-responsive">
+  <table class="table align-middle mb-0">
+    <thead><tr><th>Name</th><th>Account</th><th>Region</th><th>Backup bucket</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for c in connections %}
+      <tr>
+        <td>{{ c.display_name }}</td>
+        <td class="mono">{{ c.aws_account_id }}</td>
+        <td>{{ c.region }}</td>
+        <td class="mono text-break-all">{{ c.backup_bucket or '-' }}</td>
+        <td>{{ badge(c.status) }}</td>
+        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('aws_connections.connection_detail', connection_id=c.id) }}">Manage</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No AWS accounts connected yet. Add one below.</p>
+  {% endif %}
+</div></div>
+
+<div class="card shadow-sm"><div class="card-body">
+  <h2 class="h5">Connect an AWS account</h2>
+  <p class="text-muted">
+    CloudShield never asks for your AWS keys. You deploy one CloudFormation stack that creates a
+    backup bucket and a role CloudShield can assume &mdash; only with your private External ID.
+    Next step after saving: deploy the stack and click <em>Verify</em>.
+  </p>
+  <form method="post" action="{{ url_for('aws_connections.connect_account') }}" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="row">
+      <div class="col-md-6">{{ field(form.display_name, placeholder="e.g. Production") }}</div>
+      <div class="col-md-6">{{ field(form.aws_account_id, placeholder="123456789012", inputmode="numeric") }}</div>
+      <div class="col-md-6">{{ field(form.region, help="The region where the backup bucket will be created.") }}</div>
+      <div class="col-md-6">{{ field(form.retention_days, help="How far back you can recover. Longer retention costs more storage. Default 30.") }}</div>
+      <div class="col-md-6">{{ field(form.source_scope, help="Bucket name, a pattern like prod-*, or * for all. Use the narrowest scope that works.") }}</div>
+      <div class="col-md-6">{{ field(form.backup_bucket, placeholder="auto-generated if empty", help="Must be globally unique. Created by the stack.") }}</div>
+      <div class="col-12">{{ field(form.role_arn, help="Leave empty to use the default role name.") }}</div>
+    </div>
+    <button class="btn btn-primary">Save and show setup steps</button>
+  </form>
+</div></div>
+{% endblock %}

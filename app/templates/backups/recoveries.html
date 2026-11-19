@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Recoveries - CloudShield DR{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Recoveries</h1>
+<div class="card shadow-sm"><div class="card-body" {% if any_active %}data-autorefresh="5"{% endif %}>
+  {% if jobs %}
+  <div class="table-responsive">
+  <table class="table align-middle mb-0">
+    <thead><tr><th>#</th><th>Source</th><th>Destination</th><th>Status</th><th>Result</th><th>Started</th><th></th></tr></thead>
+    <tbody>
+    {% for j in jobs %}
+      <tr>
+        <td>{{ j.id }}</td>
+        <td class="small text-break-all">{{ j.recovery_point.source_resource if j.recovery_point else '-' }}
+          {% if j.recovery_point %}<br><span class="text-muted">as of {{ j.recovery_point.recovery_point_time | dt }}</span>{% endif %}</td>
+        <td class="mono text-break-all">{{ j.destination }}</td>
+        <td>{{ badge(j.status) }}</td>
+        <td class="small">{{ j.result_message or ('Working...' if j.is_active else '-') }}
+          {% if j.observed_recovery_seconds is not none %}<div class="text-muted">Took {{ j.observed_recovery_seconds }}s &middot; {{ j.restored_objects }} object(s) &middot; {{ j.bytes_restored | filesize }}</div>{% endif %}
+        </td>
+        <td class="small">{{ (j.started_at or j.created_at) | dt }}</td>
+        <td class="text-end">
+          {% if j.status == 'SUCCEEDED' and j.restore_mode == 'SERVER_DOWNLOAD' and j.restored_file %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('backups.download_restored', job_id=j.id) }}">Download</a>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No recoveries yet. Start one from a backup, or open an Emergency incident.</p>
+  {% endif %}
+</div></div>
+{% endblock %}

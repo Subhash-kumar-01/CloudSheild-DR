@@ -1,0 +1,32 @@
+# Optional override: use MySQL instead of SQLite. Costs more RAM/disk; only needed for heavy multi-user use.
+# Requires MYSQL_PASSWORD (and optionally MYSQL_ROOT_PASSWORD) in .env.
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: cloudshield
+      MYSQL_USER: cloudshield
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    environment:
+      DATABASE_URL: mysql+pymysql://cloudshield:${MYSQL_PASSWORD}@db:3306/cloudshield?charset=utf8mb4
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    environment:
+      DATABASE_URL: mysql+pymysql://cloudshield:${MYSQL_PASSWORD}@db:3306/cloudshield?charset=utf8mb4
+
+volumes:
+  mysql_data:

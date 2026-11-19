@@ -1,0 +1,25 @@
+{# Render a WTForms field with Bootstrap styling and inline errors. #}
+{% macro field(f, help=None) %}
+<div class="mb-3">
+  {{ f.label(class_="form-label") }}
+  {% set base = "form-select" if f.type in ("SelectField", "SelectMultipleField") else "form-control" %}
+  {{ f(class_=base ~ (" is-invalid" if f.errors else ""), **kwargs) }}
+  {% for error in f.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+  {% if help %}<div class="form-text">{{ help }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{# Coloured status badge for any job/connection/incident status. #}
+{% macro badge(status) %}
+{% set colors = {
+  "SUCCEEDED": "success", "CONNECTED": "success", "VERIFIED": "success", "RECOVERED": "success", "ACTIVE": "success",
+  "RUNNING": "primary", "PENDING": "secondary", "RECOVERY_IN_PROGRESS": "primary",
+  "PARTIAL": "warning", "OPEN": "danger", "CONTAINED": "warning", "DATA_PRESERVED": "info",
+  "FAILED": "danger", "ERROR": "danger", "RECOVERY_FAILED": "danger", "EXPIRED": "secondary", "CLOSED": "secondary",
+  "LOW": "secondary", "MEDIUM": "warning", "HIGH": "danger", "CRITICAL": "danger"
+} %}
+<span class="badge text-bg-{{ colors.get(status, 'secondary') }}">{{ (status or '-') | replace('_', ' ') }}</span>
+{% endmacro %}
+
+{# Hidden CSRF input for hand-written forms. #}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
